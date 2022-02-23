@@ -1,0 +1,278 @@
+---
+title: "APM466"
+author: "Yuteng Gao"
+date: "2/5/2022"
+output: html_document
+---
+
+
+```{r}
+library(xtable)
+library(jrvFinance)
+library(readxl)
+```
+
+```{r, error=FALSE, warning=FALSE}
+# import data
+bonds_data <- read_excel("/Users/yutenggao/Desktop/APM466/A1/dataset.xlsx", sheet = "close_price")
+ 
+# record coupon rate for ten bonds
+coupon_rate <- c(0.005,0.0275,0.0175,0.015,0.0225,0.025,0.0125,0.0225,0.0025,0.015)
+
+# record maturity rate for ten bonds
+maturity_date <- c("2022-03-01","2022-06-01","2023-03-01","2023-06-01","2024-03-01","2024-06-01","2025-03-01","2025-06-01","2026-03-01","2026-06-01")
+
+# record recording dates for close price
+recorded_date <- c("2022-01-11","2022-01-12","2022-01-13","2022-01-14","2022-01-17","2022-01-18","2022-01-19","2022-01-20","2022-01-21","2022-01-24")
+
+# construct close price table
+close_price_table <- matrix(c(bonds_data$`CAN 0.5 Mar 1 2022`, bonds_data$`CAN 2.75 Jun 1 2022`, bonds_data$`CAN 1.75 Mar 1 2023`, bonds_data$`CAN 1.5 Jun 1 2023`,
+                              bonds_data$`CAN 2.25 Mar 1 2024`, bonds_data$`CAN 2.5 Jun 1 2024`, bonds_data$`CAN 1.25 Mar 1 2025`, bonds_data$`CAN 2.25 Jun 1 2025`,
+                              bonds_data$`CAN 0.25 Mar 1 2026`, bonds_data$`CAN 1.5 Jun 1 2026`), nrow = 10, ncol = 10, byrow = FALSE)
+```
+
+###YTM
+```{r}
+# construct an empty ytm table
+ytm <- matrix('NA',nrow = 10, ncol = 10)
+
+# calculate ytm
+for (i in c(1:10)) {
+  close_price <- close_price_table[,i]
+  for (j in c(1:10)){
+    ytm[j,i] <- bond.yield(settle = recorded_date[j], mature = maturity_date[i], coupon = coupon_rate[i], freq = 2, close_price[j], convention = c("30/360","ACT/ACT","ACT/360","30/360E"), comp.freq = 2, redemption_value = 100)
+  }
+}
+```
+
+###time to maturity
+```{r}
+# construct an empty time to maturity table
+remaining_years <- matrix('NA', nrow = 10, ncol = 10)
+
+# calculate time to maturity in years
+for (i in c(1:10)){
+  for (j in c(1:10)){
+    remaining_years[i,j] <- yearFraction(recorded_date[i], maturity_date[j])
+  }
+}
+```
+
+
+###YTM graph
+```{r}
+# construct x-axis
+year <- c(0.5,1,1.5,2,2.5,3,3.5,4,4.5,5)
+
+# plot the ytm for different dates
+plot(year, ytm[1,], type = 'l', main = "5-Year YTM Curve", xlab = "Time To Maturity (yrs)", ylab = "YTM", ylim = c(0.002,0.018))
+lines(year, ytm[2,],type = 'l',lwd = 1.0, col='red')
+lines(year, ytm[3,],type = 'l',lwd = 1.0, col='green')
+lines(year, ytm[4,],type = 'l',lwd = 1.0, col='blue')
+lines(year, ytm[5,],type = 'l',lwd = 1.0, col='lightblue')
+lines(year, ytm[6,],type = 'l',lwd = 1.0, col='brown')
+lines(year, ytm[7,],type = 'l',lwd = 1.0, col='orange')
+lines(year, ytm[8,],type = 'l',lwd = 1.0, col='grey')
+lines(year, ytm[9,],type = 'l',lwd = 1.0, col='darkblue')
+lines(year, ytm[10,],type = 'l',lwd = 1.0, col='yellowgreen')
+
+# add legend
+legend('bottomright', legend = c("2022-01-11","2022-01-12","2022-01-13","2022-01-14","2022-01-17","2022-01-18","2022-01-19","2022-01-20","2022-01-21","2022-01-24"), col = c('black','red','green','blue','lightblue','brown','orange','grey','darkblue', 'yellowgreen'), lwd = 1.0, cex = 0.8)
+```
+
+
+###dirty price
+```{r}
+# construct an empty dirty price table
+dirty_price <- matrix('NA', nrow = 10, ncol = 10)
+
+# calculate the dirty price based on close price
+for (i in c(1:10)) {
+  for (j in c(1:10)) {
+    dirty_price[i,j] <- round(bond.TCF(recorded_date[i], maturity_date[j], coupon_rate[j], freq = 2)$accrued + close_price_table[i,j],2)
+  }
+}
+```
+
+
+###cash flow
+```{r}
+# construct an empty cash flow list
+cash_flow <- list()
+
+# record the cash flow
+for(i in 1:10){
+  cash_flow <- bond.TCF(recorded_date[i], maturity_date[i], coupon_rate[i], freq = 2, redemption_value = 100)$cf
+}
+```
+
+
+###calculate spot rate for the first bond 
+```{r}
+# import data
+last_coupon <- read_excel("/Users/yutenggao/Desktop/APM466/A1/dataset.xlsx", sheet = "last_coupon_date")
+
+# record month to maturity
+month_to_maturity <- c(2,5,14,17,26,29,38,41,50,53)
+
+# record month to the last payment
+month_to_last <- c(4,1,4,1,4,1,4,1,4,1)
+
+# construct an empty spot rate table
+n <- rep(1,10)
+spot_rate_table <- data.frame(n,n,n,n,n,n,n,n,n,n)
+
+# set the face value
+value = 100
+
+# calculate coupon for first bond
+coupon_1 <- coupon_rate[1]*100/2
+
+# update the first spot rate
+for (i in 1:10)
+{
+  # calculate the price
+  price_1 <- as.numeric(dirty_price[i,1])
+  result_1 <- price_1/(coupon_1 + value)
+  # calculate the first spot rate
+  spot_rate_table[i,1] <- 2*(result_1^(-1/(2*month_to_maturity[1]))-1)
+}
+```
+
+###calculate spot rate for the second bond 
+```{r}
+# calculate the second coupon 
+coupon_2 <- coupon_rate[2]*100/2
+
+# update the second spot rate
+for (i in 1:10)
+{
+  price_2 <- as.numeric(dirty_price[i,2])
+  result_2 <- price_2/(coupon_2 + value)
+  # calculate the second spot rate
+  spot_rate_table[i,2] <- 2*(result_2^(-1/(2*month_to_maturity[2])) - 1)
+}
+```
+
+###calculate spot rate for other bonds
+```{r}
+# update the spot rate for the rest bonds
+for (i in c(3:10))
+{
+  for (j in c(1:10))
+  {
+    present = 0
+    price <- as.numeric(dirty_price[j,i])
+    coupon <- coupon_rate[i]*100/2
+    # get the first date
+    begin <- (6-month_to_last[i])/12
+    # get the last date
+    finish <- (month_to_maturity[i]-1)/12
+    # get the time of future payments
+    future_coupon <- seq(begin, finish, 1/2)
+    
+    interval <- c(1:length(future_coupon))
+    
+    # update price
+    for (k in interval){
+      present <- present + coupon*(1+as.numeric(spot_rate_table[k,i])/2)^(-2*future_coupon[k])
+    }
+    # calculate the price change
+    change_p <- price - present
+    result <- change_p/(coupon + value)
+    # calculate the second spot rate
+    spot_rate_table[j,i] <- 2*(result^(-1/(2*month_to_maturity)[i]) - 1)
+    present = 0
+  }
+}
+```
+
+###plot
+```{r}
+# plot the spot rates for different dates
+plot(year, spot_rate_table[1,], type = 'l', main = "5-Year Spot Curve", xlab = "Time To Maturity (yrs)", ylab = "Spot Rate", ylim = c(0,0.0025))
+lines(year, spot_rate_table[2,],type = 'l',lwd = 1.0, col='red')
+lines(year, spot_rate_table[3,],type = 'l',lwd = 1.0, col='green')
+lines(year, spot_rate_table[4,],type = 'l',lwd = 1.0, col='blue')
+lines(year, spot_rate_table[5,],type = 'l',lwd = 1.0, col='lightblue')
+lines(year, spot_rate_table[6,],type = 'l',lwd = 1.0, col='brown')
+lines(year, spot_rate_table[7,],type = 'l',lwd = 1.0, col='orange')
+lines(year, spot_rate_table[8,],type = 'l',lwd = 1.0, col='grey')
+lines(year, spot_rate_table[9,],type = 'l',lwd = 1.0, col='darkblue')
+lines(year, spot_rate_table[10,],type = 'l',lwd = 1.0, col='yellowgreen')
+
+# add legend
+legend('topleft', legend = c("2022-01-11","2022-01-12","2022-01-13","2022-01-14","2022-01-17","2022-01-18","2022-01-19","2022-01-20","2022-01-21","2022-01-24"), col = c('black','red','green','blue','lightblue','brown','orange','grey','darkblue', 'yellowgreen'), lwd = 1.0, cex = 0.8)
+```
+
+###forward rate
+```{r}
+# construct an empty forward rate table
+forward_rate <- data.frame(n,n,n,n)
+
+# update the forward rate
+for (i in c(1:4)){
+  for (j in c(1:10)){
+    # calculate the spot rate for 1 year
+    spot_1=(1+spot_rate_table[2+2*i,j]/2)^(2+2*i)
+    # calculate the spot rate for n years
+    spot_n=(1+spot_rate_table[2*i,j]/2)^(2*i)
+    # calculate the forward rate
+    forward_rate[j,i]=2*((spot_1/spot_n)^(0.5)-1)
+  }
+}
+```
+
+
+```{r}
+# plot the forward rates for different dates
+plot(c(2,3,4,5), forward_rate[1,], type = 'l',main = "1-Year Forward Curve", xlab = "Time To Maturity (yrs)", ylab = "Forward Rate", ylim = c(-0.001,0.004))
+
+lines(c(2,3,4,5), forward_rate[2,],type = 'l',lwd = 1.0, col='red')
+lines(c(2,3,4,5), forward_rate[3,],type = 'l',lwd = 1.0, col='green')
+lines(c(2,3,4,5), forward_rate[4,],type = 'l',lwd = 1.0, col='blue')
+lines(c(2,3,4,5), forward_rate[5,],type = 'l',lwd = 1.0, col='lightblue')
+lines(c(2,3,4,5), forward_rate[6,],type = 'l',lwd = 1.0, col='brown')
+lines(c(2,3,4,5), forward_rate[7,],type = 'l',lwd = 1.0, col='orange')
+lines(c(2,3,4,5), forward_rate[8,],type = 'l',lwd = 1.0, col='grey')
+lines(c(2,3,4,5), forward_rate[9,],type = 'l',lwd = 1.0, col='darkblue')
+lines(c(2,3,4,5), forward_rate[10,],type = 'l',lwd = 1.0, col='yellowgreen')
+
+# add legend
+legend('topleft', legend = c("2022-01-11","2022-01-12","2022-01-13","2022-01-14","2022-01-17","2022-01-18","2022-01-19","2022-01-20","2022-01-21","2022-01-24"), col = c('black','red','green','blue','lightblue','brown','orange','grey','darkblue', 'yellowgreen'), lwd = 1.0, cex = 0.6)
+```
+
+```{r}
+# construct 5 empty vectors for log returns
+x1 <- vector("numeric", 9)
+x2 <- vector("numeric", 9)
+x3 <- vector("numeric", 9)
+x4 <- vector("numeric", 9)
+x5 <- vector("numeric", 9)
+
+# update log returns for every year
+for (i in c(1:9)){
+  x1[i] <- log(as.numeric(ytm[2,i])/as.numeric(ytm[2,i+1]))
+  x2[i] <- log(as.numeric(ytm[4,i])/as.numeric(ytm[4,i+1]))
+  x3[i] <- log(as.numeric(ytm[6,i])/as.numeric(ytm[6,i+1]))
+  x4[i] <- log(as.numeric(ytm[8,i])/as.numeric(ytm[8,i+1]))
+  x5[i] <- log(as.numeric(ytm[10,i])/as.numeric(ytm[10,i+1]))
+}
+
+log_return <- data.frame(x1,x2,x3,x4,x5)
+
+# get the co-variance matrix for log returns of yield
+yield_cov <- cov(log_return, log_return)
+
+# get the eigenvalues for log returns of yield
+yield_eigen <- eigen(yield_cov,symmetric = TRUE)
+
+# store them in tables
+cov_yield <- xtable(yield_cov)
+eigen_yield <- xtable(yield_eigen$vectors)
+
+# print the covariance and eigenvalues
+cov_yield
+eigen_yield
+```
+
